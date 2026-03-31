@@ -532,13 +532,22 @@ def page_ml_engine(df: pd.DataFrame, models: dict):
         elast_df = elast_mdl.summary()
         st.markdown("**Price Elasticity Estimates by Category (Log-Log OLS)**")
         styled = elast_df.copy()
-        st.dataframe(
-            styled.style.background_gradient(subset=["elasticity"], cmap="RdYlGn_r")
-                         .format({"elasticity": "{:.3f}", "std_err": "{:.3f}",
-                                  "p_value": "{:.4f}", "r_squared": "{:.3f}",
-                                  "cross_elast": "{:.3f}", "promo_lift": "{:.3f}"}),
-            use_container_width=True
-        )
+        # Colour-code elasticity column manually using st.dataframe column config
+st.dataframe(
+    styled,
+    use_container_width=True,
+    column_config={
+        "elasticity": st.column_config.NumberColumn(
+            "Price Elasticity",
+            help="How sensitive demand is to price changes",
+            format="%.2f",
+        ),
+        "std_err": st.column_config.NumberColumn("Std Error", format="%.3f"),
+        "p_value": st.column_config.NumberColumn("P-Value", format="%.4f"),
+        "r_squared": st.column_config.NumberColumn("R²", format="%.2f"),
+        "promo_lift": st.column_config.NumberColumn("Promo Lift", format="%.2f"),
+    }
+)
 
         # Elasticity arc chart
         fig_e = go.Figure()
@@ -654,12 +663,25 @@ def page_optimiser(df: pd.DataFrame):
 
         # Multi-objective comparison
         st.markdown("#### Multi-Objective Trade-off Analysis")
-        st.dataframe(multi.style.format({
-            "Price (€)": "€{:.2f}", "Discount (%)": "{:.1f}%",
-            "Revenue (€)": "€{:,.0f}", "Gross Margin %": "{:.1f}%",
-            "EBIT (€)": "€{:,.0f}", "ROI %": "{:.1f}%", "Units Sold": "{:,.0f}",
-        }).background_gradient(subset=["EBIT (€)"], cmap="RdYlGn"),
-        use_container_width=True)
+        # Format columns manually before display — avoids Styler crash on Streamlit Cloud
+            fmt_multi = multi.copy()
+            for col in fmt_multi.columns:
+                if "price" in col.lower() or "€" in col.lower():
+                    try:
+                        fmt_multi[col] = fmt_multi[col].apply(
+                            lambda x: f"€{x:.2f}" if isinstance(x, (int, float)) else x
+                        )
+                    except Exception:
+                        pass
+                elif "%" in col or "margin" in col.lower() or "ebit" in col.lower() or "roi" in col.lower():
+                    try:
+                        fmt_multi[col] = fmt_multi[col].apply(
+                            lambda x: f"{x:.1f}%" if isinstance(x, (int, float)) else x
+                        )
+                    except Exception:
+                        pass
+            
+            st.dataframe(fmt_multi, use_container_width=True)
 
         # Price–EBIT surface
         prices    = np.linspace(base_price * 0.6, base_price * 1.5, 30)
